@@ -16,6 +16,12 @@ type Entry = {
   } | null
 }
 
+type Profile = {
+  id: string
+  name: string
+  is_admin: boolean
+}
+
 function getTodayLocalDate() {
   const now = new Date()
   const year = now.getFullYear()
@@ -26,6 +32,7 @@ function getTodayLocalDate() {
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [entries, setEntries] = useState<Entry[]>([])
   const router = useRouter()
 
@@ -39,6 +46,14 @@ export default function Dashboard() {
       }
 
       setUser(data.user)
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", data.user.id)
+        .single()
+
+      setIsAdmin(profileData?.is_admin ?? false)
 
       const today = getTodayLocalDate()
 
@@ -69,7 +84,7 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-slate-950 text-white pb-24">
       <div className="max-w-5xl mx-auto p-4">
-        
+
         {/* HEADER */}
         <div className="mb-6">
           <p className="text-emerald-300 text-xs uppercase tracking-widest">
@@ -78,14 +93,16 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold">Fitness Challenge</h1>
         </div>
 
-        {/* GEWINNER */}
+        {/* LEADER */}
         {winner && (
           <div className="bg-emerald-400/20 border border-emerald-300/30 rounded-2xl p-4 mb-6">
             <p className="text-emerald-200 text-xs uppercase">
               Heute vorne
             </p>
             <p className="text-xl font-bold">
-              🏆 {winner.profiles?.name} ({winner.steps} Schritte)
+              🏆 {winner.profiles?.name}
+              {winner.user_id === user.id ? " (Du)" : ""} mit{" "}
+              {winner.steps} Schritten
             </p>
           </div>
         )}
@@ -105,7 +122,25 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 🔥 PROGRESS */}
+        {/* ADMIN BUTTON */}
+        {isAdmin && (
+          <a
+            href="/admin"
+            className="block bg-yellow-400/20 border border-yellow-300/30 text-yellow-100 font-bold rounded-2xl p-4 mb-4 text-center"
+          >
+            Admin-Bereich öffnen
+          </a>
+        )}
+
+        {/* STATISTIK BUTTON */}
+        <a
+          href="/statistik"
+          className="block bg-white/10 border border-white/10 text-white font-bold rounded-2xl p-4 mb-6 text-center"
+        >
+          Statistik anzeigen
+        </a>
+
+        {/* PROGRESS */}
         <div className="mb-6">
           <p className="text-xs text-slate-400 mb-3">
             Fortschritt heute
@@ -115,11 +150,19 @@ export default function Dashboard() {
             {entries.map((entry, index) => {
               const maxSteps = entries[0]?.steps || 1
               const percent = (entry.steps / maxSteps) * 100
+              const isMe = entry.user_id === user.id
 
               return (
                 <div key={entry.id}>
                   <div className="flex justify-between text-xs mb-1">
-                    <span>{entry.profiles?.name}</span>
+                    <span>
+                      {entry.profiles?.name}
+                      {isMe && (
+                        <span className="ml-2 text-emerald-300 font-bold">
+                          Du
+                        </span>
+                      )}
+                    </span>
                     <span>{entry.steps}</span>
                   </div>
 
@@ -128,6 +171,8 @@ export default function Dashboard() {
                       className={`h-2 rounded-full ${
                         index === 0
                           ? "bg-emerald-400"
+                          : isMe
+                          ? "bg-emerald-300/70"
                           : "bg-white/40"
                       }`}
                       style={{ width: `${percent}%` }}
@@ -146,38 +191,49 @@ export default function Dashboard() {
               Noch keine Einträge heute
             </p>
           ) : (
-            entries.map((entry, index) => (
-              <div
-                key={entry.id}
-                className={`p-4 rounded-2xl flex justify-between ${
-                  index === 0
-                    ? "bg-emerald-400/20 border border-emerald-300/30"
-                    : "bg-white/10"
-                }`}
-              >
-                <div>
-                  <p className="font-bold">
-                    {index === 0 ? "🏆 " : ""}#{index + 1}
-                  </p>
-                  <p className="text-slate-400 text-sm">
-                    {entry.profiles?.name}
-                  </p>
-                </div>
+            entries.map((entry, index) => {
+              const isMe = entry.user_id === user.id
 
-                <div className="text-right">
-                  <p className="font-bold">{entry.steps}</p>
-                  <p className="text-xs text-slate-400">
-                    {entry.movement_minutes} min ·{" "}
-                    {entry.workout_sessions}x
-                  </p>
+              return (
+                <div
+                  key={entry.id}
+                  className={`p-4 rounded-2xl flex justify-between border ${
+                    index === 0
+                      ? "bg-emerald-400/20 border-emerald-300/30"
+                      : isMe
+                      ? "bg-emerald-300/10 border-emerald-300/20"
+                      : "bg-white/10 border-white/10"
+                  }`}
+                >
+                  <div>
+                    <p className="font-bold">
+                      {index === 0 ? "🏆 " : ""}#{index + 1}
+                    </p>
+                    <p className="text-slate-400 text-sm">
+                      {entry.profiles?.name}
+                      {isMe && (
+                        <span className="ml-2 text-emerald-300 font-bold">
+                          Du
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="font-bold">{entry.steps}</p>
+                    <p className="text-xs text-slate-400">
+                      {entry.movement_minutes} min ·{" "}
+                      {entry.workout_sessions}x
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
 
-      {/* MOBILE NAV */}
+      {/* NAV */}
       <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-white/10 p-3 flex justify-around">
         <a href="/dashboard" className="text-xs text-emerald-300">
           Dashboard
@@ -194,6 +250,16 @@ export default function Dashboard() {
         <a href="/gesamtwertung" className="text-xs">
           Gesamt
         </a>
+
+        <a href="/statistik" className="text-xs">
+          Stats
+        </a>
+
+        {isAdmin && (
+          <a href="/admin" className="text-xs text-yellow-300">
+            Admin
+          </a>
+        )}
 
         <button onClick={logout} className="text-xs text-red-300">
           Logout

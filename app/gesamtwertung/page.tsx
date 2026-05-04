@@ -86,12 +86,19 @@ function applyRankingPoints<T>(
 }
 
 export default function Gesamtwertung() {
+  const [currentUserId, setCurrentUserId] = useState("")
   const [scores, setScores] = useState<UserScore[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function calculate() {
       setLoading(true)
+
+      const { data: userData } = await supabase.auth.getUser()
+
+      if (userData.user) {
+        setCurrentUserId(userData.user.id)
+      }
 
       const { data: profilesData } = await supabase
         .from("profiles")
@@ -228,7 +235,9 @@ export default function Gesamtwertung() {
               Aktuell vorne
             </p>
             <p className="text-xl font-bold">
-              🏆 {leader.name} ({leader.points} Punkte)
+              🏆 {leader.name}
+              {leader.user_id === currentUserId ? " (Du)" : ""} mit{" "}
+              {leader.points} Punkten
             </p>
           </div>
         )}
@@ -237,48 +246,61 @@ export default function Gesamtwertung() {
           <p className="text-slate-400">Lade...</p>
         ) : (
           <div className="space-y-3">
-            {scores.map((user, index) => (
-              <div
-                key={user.user_id}
-                className={`p-4 rounded-2xl ${
-                  index === 0
-                    ? "bg-emerald-400/20 border border-emerald-300/30"
-                    : "bg-white/10"
-                }`}
-              >
-                <div className="flex justify-between mb-3">
-                  <div>
-                    <p className="font-bold">
-                      {index === 0 ? "🏆 " : ""}#{index + 1}
-                    </p>
-                    <p className="text-slate-300">{user.name}</p>
+            {scores.map((user, index) => {
+              const isMe = user.user_id === currentUserId
+
+              return (
+                <div
+                  key={user.user_id}
+                  className={`p-4 rounded-2xl border ${
+                    index === 0
+                      ? "bg-emerald-400/20 border-emerald-300/30"
+                      : isMe
+                      ? "bg-emerald-300/10 border-emerald-300/20"
+                      : "bg-white/10 border-white/10"
+                  }`}
+                >
+                  <div className="flex justify-between mb-3">
+                    <div>
+                      <p className="font-bold">
+                        {index === 0 ? "🏆 " : ""}#{index + 1}
+                      </p>
+                      <p className="text-slate-300">
+                        {user.name}
+                        {isMe && (
+                          <span className="ml-2 text-emerald-300 font-bold">
+                            Du
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-2xl font-bold">{user.points}</p>
+                      <p className="text-xs text-slate-400">Punkte</p>
+                    </div>
                   </div>
 
-                  <div className="text-right">
-                    <p className="text-2xl font-bold">{user.points}</p>
-                    <p className="text-xs text-slate-400">Punkte</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-slate-900 rounded-xl p-2">
+                      Start: {user.startPoints}
+                    </div>
+
+                    <div className="bg-slate-900 rounded-xl p-2">
+                      Schritte: {user.dailyStepPoints}
+                    </div>
+
+                    <div className="bg-slate-900 rounded-xl p-2">
+                      Minuten: {user.weeklyMinutePoints}
+                    </div>
+
+                    <div className="bg-slate-900 rounded-xl p-2">
+                      Sport: {user.weeklyWorkoutPoints}
+                    </div>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-900 rounded-xl p-2">
-                    Start: {user.startPoints}
-                  </div>
-
-                  <div className="bg-slate-900 rounded-xl p-2">
-                    Schritte: {user.dailyStepPoints}
-                  </div>
-
-                  <div className="bg-slate-900 rounded-xl p-2">
-                    Minuten: {user.weeklyMinutePoints}
-                  </div>
-
-                  <div className="bg-slate-900 rounded-xl p-2">
-                    Sport: {user.weeklyWorkoutPoints}
-                  </div>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

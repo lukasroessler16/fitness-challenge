@@ -90,6 +90,7 @@ function applyRankingPoints<T>(
 }
 
 export default function Wochenwertung() {
+  const [currentUserId, setCurrentUserId] = useState("")
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [weeks, setWeeks] = useState<string[]>([])
@@ -100,6 +101,12 @@ export default function Wochenwertung() {
   useEffect(() => {
     async function load() {
       setLoading(true)
+
+      const { data: userData } = await supabase.auth.getUser()
+
+      if (userData.user) {
+        setCurrentUserId(userData.user.id)
+      }
 
       const { data: profilesData } = await supabase
         .from("profiles")
@@ -202,7 +209,7 @@ export default function Wochenwertung() {
       (user) => user.minutes,
       (user) => user.user_id,
       (userId, points) => {
-        map[userId].minutePoints = points
+        map[userId].minutePoints += points
         map[userId].totalWeekPoints += points
       }
     )
@@ -212,28 +219,16 @@ export default function Wochenwertung() {
       (user) => user.workouts,
       (user) => user.user_id,
       (userId, points) => {
-        map[userId].workoutPoints = points
+        map[userId].workoutPoints += points
         map[userId].totalWeekPoints += points
       }
     )
 
     const finalRanking = Object.values(map).sort((a, b) => {
-      if (b.totalWeekPoints !== a.totalWeekPoints) {
-        return b.totalWeekPoints - a.totalWeekPoints
-      }
-
-      if (b.stepPoints !== a.stepPoints) {
-        return b.stepPoints - a.stepPoints
-      }
-
-      if (b.minutes !== a.minutes) {
-        return b.minutes - a.minutes
-      }
-
-      if (b.workouts !== a.workouts) {
-        return b.workouts - a.workouts
-      }
-
+      if (b.totalWeekPoints !== a.totalWeekPoints) return b.totalWeekPoints - a.totalWeekPoints
+      if (b.stepPoints !== a.stepPoints) return b.stepPoints - a.stepPoints
+      if (b.minutes !== a.minutes) return b.minutes - a.minutes
+      if (b.workouts !== a.workouts) return b.workouts - a.workouts
       return a.name.localeCompare(b.name)
     })
 
@@ -291,104 +286,87 @@ export default function Wochenwertung() {
                   Diese Woche vorne
                 </p>
                 <p className="text-xl font-bold">
-                  🏆 {leader.name} mit {leader.totalWeekPoints} Punkten
+                  🏆 {leader.name}
+                  {leader.user_id === currentUserId ? " (Du)" : ""} mit{" "}
+                  {leader.totalWeekPoints} Punkten
                 </p>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="bg-white/10 rounded-2xl p-4">
-                <p className="text-xs text-slate-400">Teilnehmer</p>
-                <p className="text-2xl font-bold">{ranking.length}</p>
-              </div>
-
-              <div className="bg-white/10 rounded-2xl p-4">
-                <p className="text-xs text-slate-400">Max Punkte</p>
-                <p className="text-2xl font-bold">
-                  {leader ? leader.totalWeekPoints : 0}
-                </p>
-              </div>
-
-              <div className="bg-white/10 rounded-2xl p-4">
-                <p className="text-xs text-slate-400">Meiste Tagessiege</p>
-                <p className="text-2xl font-bold">
-                  {ranking.length > 0
-                    ? Math.max(...ranking.map((user) => user.stepPoints))
-                    : 0}
-                </p>
-              </div>
-
-              <div className="bg-white/10 rounded-2xl p-4">
-                <p className="text-xs text-slate-400">Meiste Minuten</p>
-                <p className="text-2xl font-bold">
-                  {ranking.length > 0
-                    ? Math.max(...ranking.map((user) => user.minutes))
-                    : 0}
-                </p>
-              </div>
-            </div>
-
             <div className="space-y-3">
-              {ranking.map((user, index) => (
-                <div
-                  key={user.user_id}
-                  className={`rounded-2xl p-4 border ${
-                    index === 0
-                      ? "bg-emerald-400/20 border-emerald-300/30"
-                      : "bg-white/10 border-white/10"
-                  }`}
-                >
-                  <div className="flex justify-between gap-3 mb-4">
-                    <div>
-                      <p className="font-bold">
-                        {index === 0 ? "🏆 " : ""}#{index + 1}
-                      </p>
-                      <p className="text-slate-300">{user.name}</p>
+              {ranking.map((user, index) => {
+                const isMe = user.user_id === currentUserId
+
+                return (
+                  <div
+                    key={user.user_id}
+                    className={`rounded-2xl p-4 border ${
+                      index === 0
+                        ? "bg-emerald-400/20 border-emerald-300/30"
+                        : isMe
+                        ? "bg-emerald-300/10 border-emerald-300/20"
+                        : "bg-white/10 border-white/10"
+                    }`}
+                  >
+                    <div className="flex justify-between gap-3 mb-4">
+                      <div>
+                        <p className="font-bold">
+                          {index === 0 ? "🏆 " : ""}#{index + 1}
+                        </p>
+                        <p className="text-slate-300">
+                          {user.name}
+                          {isMe && (
+                            <span className="ml-2 text-emerald-300 font-bold">
+                              Du
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-2xl font-bold">
+                          {user.totalWeekPoints}
+                        </p>
+                        <p className="text-xs text-slate-400">Wochenpunkte</p>
+                      </div>
                     </div>
 
-                    <div className="text-right">
-                      <p className="text-2xl font-bold">
-                        {user.totalWeekPoints}
-                      </p>
-                      <p className="text-xs text-slate-400">Wochenpunkte</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-slate-900/80 rounded-xl p-3">
+                        <p className="text-xs text-slate-400">
+                          Tagessiege Schritte
+                        </p>
+                        <p className="font-bold">{user.stepPoints} Pkt.</p>
+                        <p className="text-xs text-slate-500">
+                          {user.steps} Schritte
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-900/80 rounded-xl p-3">
+                        <p className="text-xs text-slate-400">Minuten</p>
+                        <p className="font-bold">{user.minutes}</p>
+                        <p className="text-xs text-slate-500">
+                          {user.minutePoints} Pkt.
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-900/80 rounded-xl p-3">
+                        <p className="text-xs text-slate-400">Sporteinheiten</p>
+                        <p className="font-bold">{user.workouts}</p>
+                        <p className="text-xs text-slate-500">
+                          {user.workoutPoints} Pkt.
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-900/80 rounded-xl p-3">
+                        <p className="text-xs text-slate-400">Punkte gesamt</p>
+                        <p className="font-bold">{user.totalWeekPoints}</p>
+                        <p className="text-xs text-slate-500">diese Woche</p>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-900/80 rounded-xl p-3">
-                      <p className="text-xs text-slate-400">
-                        Tagessiege Schritte
-                      </p>
-                      <p className="font-bold">{user.stepPoints} Pkt.</p>
-                      <p className="text-xs text-slate-500">
-                        {user.steps} Schritte
-                      </p>
-                    </div>
-
-                    <div className="bg-slate-900/80 rounded-xl p-3">
-                      <p className="text-xs text-slate-400">Minuten</p>
-                      <p className="font-bold">{user.minutes}</p>
-                      <p className="text-xs text-slate-500">
-                        {user.minutePoints} Pkt.
-                      </p>
-                    </div>
-
-                    <div className="bg-slate-900/80 rounded-xl p-3">
-                      <p className="text-xs text-slate-400">Sporteinheiten</p>
-                      <p className="font-bold">{user.workouts}</p>
-                      <p className="text-xs text-slate-500">
-                        {user.workoutPoints} Pkt.
-                      </p>
-                    </div>
-
-                    <div className="bg-slate-900/80 rounded-xl p-3">
-                      <p className="text-xs text-slate-400">Punkte gesamt</p>
-                      <p className="font-bold">{user.totalWeekPoints}</p>
-                      <p className="text-xs text-slate-500">diese Woche</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )}

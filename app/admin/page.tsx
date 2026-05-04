@@ -33,12 +33,25 @@ type ProfileRow = Profile & {
   start_points: number
 }
 
+function getTodayLocalDate() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, "0")
+  const day = String(now.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [checked, setChecked] = useState(false)
   const [entries, setEntries] = useState<Entry[]>([])
   const [profiles, setProfiles] = useState<ProfileRow[]>([])
   const [message, setMessage] = useState("")
+  const [newUserId, setNewUserId] = useState("")
+  const [newDate, setNewDate] = useState(getTodayLocalDate())
+  const [newSteps, setNewSteps] = useState(0)
+  const [newMinutes, setNewMinutes] = useState(0)
+  const [newWorkouts, setNewWorkouts] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -104,6 +117,10 @@ export default function AdminPage() {
 
     setProfiles(mappedProfiles)
     setEntries((entriesData as Entry[]) ?? [])
+
+    if (!newUserId && mappedProfiles.length > 0) {
+      setNewUserId(mappedProfiles[0].id)
+    }
   }
 
   function updateEntryLocal(id: string, field: keyof Entry, value: number | string) {
@@ -124,6 +141,47 @@ export default function AdminPage() {
         profile.id === id ? { ...profile, [field]: value } : profile
       )
     )
+  }
+
+  async function createEntry() {
+    setMessage("")
+
+    if (!newUserId) {
+      setMessage("Bitte einen Benutzer auswählen.")
+      return
+    }
+
+    const { data: existing } = await supabase
+      .from("daily_entries")
+      .select("*")
+      .eq("user_id", newUserId)
+      .eq("date", newDate)
+      .maybeSingle()
+
+    if (existing) {
+      setMessage("Für diesen Benutzer gibt es an diesem Datum bereits einen Eintrag.")
+      return
+    }
+
+    const { error } = await supabase.from("daily_entries").insert({
+      user_id: newUserId,
+      date: newDate,
+      steps: newSteps,
+      movement_minutes: newMinutes,
+      workout_sessions: newWorkouts,
+    })
+
+    if (error) {
+      console.log(error)
+      setMessage("Fehler beim Erstellen des Eintrags.")
+      return
+    }
+
+    setMessage("Neuer Eintrag erstellt.")
+    setNewSteps(0)
+    setNewMinutes(0)
+    setNewWorkouts(0)
+    await load()
   }
 
   async function saveEntry(entry: Entry) {
@@ -151,7 +209,6 @@ export default function AdminPage() {
 
   async function deleteEntry(entryId: string) {
     const confirmed = confirm("Diesen Eintrag wirklich löschen?")
-
     if (!confirmed) return
 
     setMessage("")
@@ -233,9 +290,6 @@ export default function AdminPage() {
       <main className="min-h-screen bg-slate-950 text-white p-6">
         <div className="max-w-xl mx-auto bg-white/10 border border-white/10 rounded-3xl p-6">
           <h1 className="text-3xl font-bold mb-3">Kein Zugriff</h1>
-          <p className="text-slate-400 mb-6">
-            Du bist nicht als Admin freigeschaltet.
-          </p>
           <a
             href="/dashboard"
             className="bg-emerald-400 text-slate-950 font-bold px-5 py-3 rounded-2xl inline-block"
@@ -265,6 +319,88 @@ export default function AdminPage() {
             {message}
           </div>
         )}
+
+        <section className="mb-8">
+          <h2 className="text-xl font-bold mb-3">Neuen Eintrag erstellen</h2>
+
+          <div className="bg-white/10 border border-white/10 rounded-2xl p-4">
+            <div className="grid md:grid-cols-6 gap-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Benutzer
+                </label>
+                <select
+                  value={newUserId}
+                  onChange={(e) => setNewUserId(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Datum
+                </label>
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Schritte
+                </label>
+                <input
+                  type="number"
+                  value={newSteps}
+                  onChange={(e) => setNewSteps(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Minuten
+                </label>
+                <input
+                  type="number"
+                  value={newMinutes}
+                  onChange={(e) => setNewMinutes(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Sport
+                </label>
+                <input
+                  type="number"
+                  value={newWorkouts}
+                  onChange={(e) => setNewWorkouts(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  onClick={createEntry}
+                  className="w-full bg-emerald-400 text-slate-950 font-bold px-4 py-3 rounded-xl"
+                >
+                  Erstellen
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section className="mb-8">
           <h2 className="text-xl font-bold mb-3">Benutzer verwalten</h2>
@@ -406,7 +542,7 @@ export default function AdminPage() {
 
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">
-                        Sporteinheiten
+                        Sport
                       </label>
                       <input
                         type="number"
