@@ -105,6 +105,40 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* 🔥 PROGRESS */}
+        <div className="mb-6">
+          <p className="text-xs text-slate-400 mb-3">
+            Fortschritt heute
+          </p>
+
+          <div className="space-y-3">
+            {entries.map((entry, index) => {
+              const maxSteps = entries[0]?.steps || 1
+              const percent = (entry.steps / maxSteps) * 100
+
+              return (
+                <div key={entry.id}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>{entry.profiles?.name}</span>
+                    <span>{entry.steps}</span>
+                  </div>
+
+                  <div className="w-full bg-slate-800 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full ${
+                        index === 0
+                          ? "bg-emerald-400"
+                          : "bg-white/40"
+                      }`}
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         {/* LISTE */}
         <div className="space-y-3">
           {entries.length === 0 ? (
