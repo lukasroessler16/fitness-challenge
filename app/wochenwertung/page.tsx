@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-const CHALLENGE_START_DATE = "2026-05-04"
-
 type Profile = {
   id: string
   name: string
@@ -71,7 +69,6 @@ function applyRankingPoints<T>(
   addPoints: (userId: string, points: number) => void
 ) {
   const sorted = [...items].sort((a, b) => getValue(b) - getValue(a))
-
   let currentRank = 1
   let previousValue: number | null = null
 
@@ -82,15 +79,14 @@ function applyRankingPoints<T>(
       currentRank = index + 1
     }
 
-    const points = pointsForRank(currentRank)
-    addPoints(getUserId(item), points)
-
+    addPoints(getUserId(item), pointsForRank(currentRank))
     previousValue = value
   })
 }
 
 export default function Wochenwertung() {
   const [currentUserId, setCurrentUserId] = useState("")
+  const [startDate, setStartDate] = useState("")
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [weeks, setWeeks] = useState<string[]>([])
@@ -103,10 +99,16 @@ export default function Wochenwertung() {
       setLoading(true)
 
       const { data: userData } = await supabase.auth.getUser()
+      if (userData.user) setCurrentUserId(userData.user.id)
 
-      if (userData.user) {
-        setCurrentUserId(userData.user.id)
-      }
+      const { data: settings } = await supabase
+        .from("challenge_settings")
+        .select("*")
+        .eq("id", 1)
+        .single()
+
+      const challengeStart = settings?.challenge_start_date ?? "2026-05-04"
+      setStartDate(challengeStart)
 
       const { data: profilesData } = await supabase
         .from("profiles")
@@ -116,7 +118,7 @@ export default function Wochenwertung() {
       const { data: entriesData } = await supabase
         .from("daily_entries")
         .select("*")
-        .gte("date", CHALLENGE_START_DATE)
+        .gte("date", challengeStart)
 
       const loadedProfiles = (profilesData ?? []) as Profile[]
       const loadedEntries = (entriesData ?? []) as Entry[]
@@ -225,10 +227,22 @@ export default function Wochenwertung() {
     )
 
     const finalRanking = Object.values(map).sort((a, b) => {
-      if (b.totalWeekPoints !== a.totalWeekPoints) return b.totalWeekPoints - a.totalWeekPoints
-      if (b.stepPoints !== a.stepPoints) return b.stepPoints - a.stepPoints
-      if (b.minutes !== a.minutes) return b.minutes - a.minutes
-      if (b.workouts !== a.workouts) return b.workouts - a.workouts
+      if (b.totalWeekPoints !== a.totalWeekPoints) {
+        return b.totalWeekPoints - a.totalWeekPoints
+      }
+
+      if (b.stepPoints !== a.stepPoints) {
+        return b.stepPoints - a.stepPoints
+      }
+
+      if (b.minutes !== a.minutes) {
+        return b.minutes - a.minutes
+      }
+
+      if (b.workouts !== a.workouts) {
+        return b.workouts - a.workouts
+      }
+
       return a.name.localeCompare(b.name)
     })
 
@@ -246,7 +260,8 @@ export default function Wochenwertung() {
           </p>
           <h1 className="text-3xl font-bold">Wochenwertung</h1>
           <p className="text-slate-400 mt-2 text-sm">
-            Schritte zählen täglich. Minuten und Sporteinheiten zählen pro Woche.
+            Zählt ab {startDate || "..."}. Schritte zählen täglich, Minuten und
+            Sporteinheiten pro Woche.
           </p>
         </div>
 
@@ -387,6 +402,10 @@ export default function Wochenwertung() {
 
         <a href="/gesamtwertung" className="text-xs">
           Gesamt
+        </a>
+
+        <a href="/statistik" className="text-xs">
+          Stats
         </a>
       </div>
     </main>

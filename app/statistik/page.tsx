@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-const CHALLENGE_START_DATE = "2026-05-04"
-
 type Profile = {
   id: string
   name: string
@@ -32,11 +30,21 @@ type UserStats = {
 
 export default function StatistikPage() {
   const [stats, setStats] = useState<UserStats[]>([])
+  const [startDate, setStartDate] = useState("")
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       setLoading(true)
+
+      const { data: settings } = await supabase
+        .from("challenge_settings")
+        .select("*")
+        .eq("id", 1)
+        .single()
+
+      const challengeStart = settings?.challenge_start_date ?? "2026-05-04"
+      setStartDate(challengeStart)
 
       const { data: profilesData } = await supabase
         .from("profiles")
@@ -46,7 +54,7 @@ export default function StatistikPage() {
       const { data: entriesData } = await supabase
         .from("daily_entries")
         .select("*")
-        .gte("date", CHALLENGE_START_DATE)
+        .gte("date", challengeStart)
 
       const profiles = (profilesData ?? []) as Profile[]
       const entries = (entriesData ?? []) as Entry[]
@@ -105,8 +113,14 @@ export default function StatistikPage() {
   const maxWorkouts = Math.max(...stats.map((user) => user.totalWorkouts), 1)
 
   const totalStepsAll = stats.reduce((sum, user) => sum + user.totalSteps, 0)
-  const totalMinutesAll = stats.reduce((sum, user) => sum + user.totalMinutes, 0)
-  const totalWorkoutsAll = stats.reduce((sum, user) => sum + user.totalWorkouts, 0)
+  const totalMinutesAll = stats.reduce(
+    (sum, user) => sum + user.totalMinutes,
+    0
+  )
+  const totalWorkoutsAll = stats.reduce(
+    (sum, user) => sum + user.totalWorkouts,
+    0
+  )
 
   return (
     <main className="min-h-screen bg-slate-950 text-white pb-24">
@@ -117,7 +131,7 @@ export default function StatistikPage() {
           </p>
           <h1 className="text-3xl font-bold">Challenge-Auswertung</h1>
           <p className="text-slate-400 mt-2 text-sm">
-            Gesamtwerte und Durchschnittswerte seit {CHALLENGE_START_DATE}.
+            Gesamtwerte und Durchschnittswerte seit {startDate || "..."}.
           </p>
         </div>
 
@@ -250,7 +264,7 @@ export default function StatistikPage() {
         </a>
 
         <a href="/statistik" className="text-xs text-emerald-300">
-          Statistik
+          Stats
         </a>
       </div>
     </main>

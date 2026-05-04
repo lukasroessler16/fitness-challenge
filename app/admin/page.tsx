@@ -47,11 +47,15 @@ export default function AdminPage() {
   const [entries, setEntries] = useState<Entry[]>([])
   const [profiles, setProfiles] = useState<ProfileRow[]>([])
   const [message, setMessage] = useState("")
+
+  const [challengeStartDate, setChallengeStartDate] = useState("2026-05-04")
+
   const [newUserId, setNewUserId] = useState("")
   const [newDate, setNewDate] = useState(getTodayLocalDate())
   const [newSteps, setNewSteps] = useState(0)
   const [newMinutes, setNewMinutes] = useState(0)
   const [newWorkouts, setNewWorkouts] = useState(0)
+
   const router = useRouter()
 
   useEffect(() => {
@@ -80,6 +84,16 @@ export default function AdminPage() {
 
     setIsAdmin(true)
     setChecked(true)
+
+    const { data: settingsData } = await supabase
+      .from("challenge_settings")
+      .select("*")
+      .eq("id", 1)
+      .single()
+
+    if (settingsData?.challenge_start_date) {
+      setChallengeStartDate(settingsData.challenge_start_date)
+    }
 
     const { data: profilesData } = await supabase
       .from("profiles")
@@ -123,7 +137,31 @@ export default function AdminPage() {
     }
   }
 
-  function updateEntryLocal(id: string, field: keyof Entry, value: number | string) {
+  async function saveChallengeSettings() {
+    setMessage("")
+
+    const { error } = await supabase
+      .from("challenge_settings")
+      .update({
+        challenge_start_date: challengeStartDate,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", 1)
+
+    if (error) {
+      console.log(error)
+      setMessage("Fehler beim Speichern der Challenge-Einstellungen.")
+      return
+    }
+
+    setMessage("Challenge-Einstellungen gespeichert.")
+  }
+
+  function updateEntryLocal(
+    id: string,
+    field: keyof Entry,
+    value: number | string
+  ) {
     setEntries((current) =>
       current.map((entry) =>
         entry.id === id ? { ...entry, [field]: value } : entry
@@ -310,7 +348,7 @@ export default function AdminPage() {
           </p>
           <h1 className="text-3xl font-bold">Kontrollzentrum</h1>
           <p className="text-slate-400 mt-2 text-sm">
-            Benutzer, Startpunkte und Tageswerte verwalten.
+            Benutzer, Startpunkte, Challenge-Start und Tageswerte verwalten.
           </p>
         </div>
 
@@ -319,6 +357,41 @@ export default function AdminPage() {
             {message}
           </div>
         )}
+
+        <section className="mb-8">
+          <h2 className="text-xl font-bold mb-3">Challenge-Einstellungen</h2>
+
+          <div className="bg-white/10 border border-white/10 rounded-2xl p-4">
+            <div className="grid md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Startdatum der Webapp-Wertung
+                </label>
+                <input
+                  type="date"
+                  value={challengeStartDate}
+                  onChange={(event) =>
+                    setChallengeStartDate(event.target.value)
+                  }
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  onClick={saveChallengeSettings}
+                  className="w-full bg-emerald-400 text-slate-950 font-bold px-4 py-3 rounded-xl"
+                >
+                  Einstellungen speichern
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-400 mt-3">
+              Alle Auswertungen zählen später nur Einträge ab diesem Datum.
+            </p>
+          </div>
+        </section>
 
         <section className="mb-8">
           <h2 className="text-xl font-bold mb-3">Neuen Eintrag erstellen</h2>
@@ -331,7 +404,7 @@ export default function AdminPage() {
                 </label>
                 <select
                   value={newUserId}
-                  onChange={(e) => setNewUserId(e.target.value)}
+                  onChange={(event) => setNewUserId(event.target.value)}
                   className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
                 >
                   {profiles.map((profile) => (
@@ -349,7 +422,7 @@ export default function AdminPage() {
                 <input
                   type="date"
                   value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
+                  onChange={(event) => setNewDate(event.target.value)}
                   className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
                 />
               </div>
@@ -361,7 +434,7 @@ export default function AdminPage() {
                 <input
                   type="number"
                   value={newSteps}
-                  onChange={(e) => setNewSteps(Number(e.target.value))}
+                  onChange={(event) => setNewSteps(Number(event.target.value))}
                   className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
                 />
               </div>
@@ -373,7 +446,7 @@ export default function AdminPage() {
                 <input
                   type="number"
                   value={newMinutes}
-                  onChange={(e) => setNewMinutes(Number(e.target.value))}
+                  onChange={(event) => setNewMinutes(Number(event.target.value))}
                   className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
                 />
               </div>
@@ -385,7 +458,7 @@ export default function AdminPage() {
                 <input
                   type="number"
                   value={newWorkouts}
-                  onChange={(e) => setNewWorkouts(Number(e.target.value))}
+                  onChange={(event) => setNewWorkouts(Number(event.target.value))}
                   className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
                 />
               </div>
@@ -419,8 +492,8 @@ export default function AdminPage() {
                     <input
                       type="text"
                       value={profile.name}
-                      onChange={(e) =>
-                        updateProfileLocal(profile.id, "name", e.target.value)
+                      onChange={(event) =>
+                        updateProfileLocal(profile.id, "name", event.target.value)
                       }
                       className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
                     />
@@ -433,11 +506,11 @@ export default function AdminPage() {
                     <input
                       type="number"
                       value={profile.start_points}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         updateProfileLocal(
                           profile.id,
                           "start_points",
-                          Number(e.target.value)
+                          Number(event.target.value)
                         )
                       }
                       className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
@@ -448,11 +521,11 @@ export default function AdminPage() {
                     <input
                       type="checkbox"
                       checked={profile.is_admin}
-                      onChange={(e) =>
+                      onChange={(event) =>
                         updateProfileLocal(
                           profile.id,
                           "is_admin",
-                          e.target.checked
+                          event.target.checked
                         )
                       }
                     />
@@ -497,8 +570,8 @@ export default function AdminPage() {
                       <input
                         type="date"
                         value={entry.date}
-                        onChange={(e) =>
-                          updateEntryLocal(entry.id, "date", e.target.value)
+                        onChange={(event) =>
+                          updateEntryLocal(entry.id, "date", event.target.value)
                         }
                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
                       />
@@ -511,11 +584,11 @@ export default function AdminPage() {
                       <input
                         type="number"
                         value={entry.steps}
-                        onChange={(e) =>
+                        onChange={(event) =>
                           updateEntryLocal(
                             entry.id,
                             "steps",
-                            Number(e.target.value)
+                            Number(event.target.value)
                           )
                         }
                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
@@ -529,11 +602,11 @@ export default function AdminPage() {
                       <input
                         type="number"
                         value={entry.movement_minutes}
-                        onChange={(e) =>
+                        onChange={(event) =>
                           updateEntryLocal(
                             entry.id,
                             "movement_minutes",
-                            Number(e.target.value)
+                            Number(event.target.value)
                           )
                         }
                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
@@ -547,11 +620,11 @@ export default function AdminPage() {
                       <input
                         type="number"
                         value={entry.workout_sessions}
-                        onChange={(e) =>
+                        onChange={(event) =>
                           updateEntryLocal(
                             entry.id,
                             "workout_sessions",
-                            Number(e.target.value)
+                            Number(event.target.value)
                           )
                         }
                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
@@ -593,6 +666,9 @@ export default function AdminPage() {
         </a>
         <a href="/gesamtwertung" className="text-xs">
           Gesamt
+        </a>
+        <a href="/statistik" className="text-xs">
+          Stats
         </a>
         <a href="/admin" className="text-xs text-emerald-300">
           Admin

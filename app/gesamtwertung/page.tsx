@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-const CHALLENGE_START_DATE = "2026-05-04"
-
 type Profile = {
   id: string
   name: string
@@ -88,6 +86,7 @@ function applyRankingPoints<T>(
 export default function Gesamtwertung() {
   const [currentUserId, setCurrentUserId] = useState("")
   const [scores, setScores] = useState<UserScore[]>([])
+  const [startDate, setStartDate] = useState("")
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -95,10 +94,17 @@ export default function Gesamtwertung() {
       setLoading(true)
 
       const { data: userData } = await supabase.auth.getUser()
+      if (userData.user) setCurrentUserId(userData.user.id)
 
-      if (userData.user) {
-        setCurrentUserId(userData.user.id)
-      }
+      // 🔥 STARTDATUM LADEN
+      const { data: settings } = await supabase
+        .from("challenge_settings")
+        .select("*")
+        .eq("id", 1)
+        .single()
+
+      const challengeStart = settings?.challenge_start_date
+      setStartDate(challengeStart)
 
       const { data: profilesData } = await supabase
         .from("profiles")
@@ -107,7 +113,7 @@ export default function Gesamtwertung() {
       const { data: entriesData } = await supabase
         .from("daily_entries")
         .select("*")
-        .gte("date", CHALLENGE_START_DATE)
+        .gte("date", challengeStart)
 
       const { data: startScoresData } = await supabase
         .from("start_scores")
@@ -133,82 +139,74 @@ export default function Gesamtwertung() {
 
       startScores.forEach((score) => {
         if (!scoreMap[score.user_id]) return
-
         scoreMap[score.user_id].points += score.start_points
         scoreMap[score.user_id].startPoints = score.start_points
       })
 
-      const days = [...new Set(entries.map((entry) => entry.date))]
+      const days = [...new Set(entries.map((e) => e.date))]
 
       days.forEach((day) => {
-        const dayEntries = entries.filter((entry) => entry.date === day)
+        const dayEntries = entries.filter((e) => e.date === day)
         if (dayEntries.length === 0) return
 
-        const maxSteps = Math.max(...dayEntries.map((entry) => entry.steps))
+        const maxSteps = Math.max(...dayEntries.map((e) => e.steps))
 
-        dayEntries.forEach((entry) => {
-          if (!scoreMap[entry.user_id]) return
-
-          if (entry.steps === maxSteps) {
-            scoreMap[entry.user_id].points += 1
-            scoreMap[entry.user_id].dailyStepPoints += 1
+        dayEntries.forEach((e) => {
+          if (e.steps === maxSteps) {
+            scoreMap[e.user_id].points += 1
+            scoreMap[e.user_id].dailyStepPoints += 1
           }
         })
       })
 
-      const weeks = [...new Set(entries.map((entry) => getWeekKey(entry.date)))]
+      const weeks = [...new Set(entries.map((e) => getWeekKey(e.date)))]
 
       weeks.forEach((week) => {
         const weekEntries = entries.filter(
-          (entry) => getWeekKey(entry.date) === week
+          (e) => getWeekKey(e.date) === week
         )
 
         const totals: Record<string, WeeklyTotal> = {}
 
-        weekEntries.forEach((entry) => {
-          if (!totals[entry.user_id]) {
-            totals[entry.user_id] = {
-              user_id: entry.user_id,
+        weekEntries.forEach((e) => {
+          if (!totals[e.user_id]) {
+            totals[e.user_id] = {
+              user_id: e.user_id,
               minutes: 0,
               workouts: 0,
             }
           }
 
-          totals[entry.user_id].minutes += entry.movement_minutes
-          totals[entry.user_id].workouts += entry.workout_sessions
+          totals[e.user_id].minutes += e.movement_minutes
+          totals[e.user_id].workouts += e.workout_sessions
         })
 
-        const users: WeeklyTotal[] = Object.values(totals)
+        const users = Object.values(totals)
 
         applyRankingPoints(
           users,
-          (user) => user.minutes,
-          (user) => user.user_id,
-          (userId, points) => {
-            if (!scoreMap[userId]) return
-
-            scoreMap[userId].points += points
-            scoreMap[userId].weeklyMinutePoints += points
+          (u) => u.minutes,
+          (u) => u.user_id,
+          (id, pts) => {
+            scoreMap[id].points += pts
+            scoreMap[id].weeklyMinutePoints += pts
           }
         )
 
         applyRankingPoints(
           users,
-          (user) => user.workouts,
-          (user) => user.user_id,
-          (userId, points) => {
-            if (!scoreMap[userId]) return
-
-            scoreMap[userId].points += points
-            scoreMap[userId].weeklyWorkoutPoints += points
+          (u) => u.workouts,
+          (u) => u.user_id,
+          (id, pts) => {
+            scoreMap[id].points += pts
+            scoreMap[id].weeklyWorkoutPoints += pts
           }
         )
       })
 
-      const final = Object.values(scoreMap).sort((a, b) => {
-        if (b.points !== a.points) return b.points - a.points
-        return a.name.localeCompare(b.name)
-      })
+      const final = Object.values(scoreMap).sort(
+        (a, b) => b.points - a.points
+      )
 
       setScores(final)
       setLoading(false)
@@ -227,18 +225,18 @@ export default function Gesamtwertung() {
             Gesamtwertung
           </p>
           <h1 className="text-3xl font-bold">Ranking</h1>
+          {startDate && (
+            <p className="text-xs text-slate-400 mt-2">
+              zählt ab {startDate}
+            </p>
+          )}
         </div>
 
         {leader && (
           <div className="bg-emerald-400/20 border border-emerald-300/30 rounded-2xl p-4 mb-6">
-            <p className="text-xs text-emerald-200">
-              Aktuell vorne
-            </p>
-            <p className="text-xl font-bold">
-              🏆 {leader.name}
-              {leader.user_id === currentUserId ? " (Du)" : ""} mit{" "}
-              {leader.points} Punkten
-            </p>
+            🏆 {leader.name}
+            {leader.user_id === currentUserId ? " (Du)" : ""} –{" "}
+            {leader.points} Punkte
           </div>
         )}
 
@@ -260,67 +258,22 @@ export default function Gesamtwertung() {
                       : "bg-white/10 border-white/10"
                   }`}
                 >
-                  <div className="flex justify-between mb-3">
+                  <div className="flex justify-between">
                     <div>
-                      <p className="font-bold">
-                        {index === 0 ? "🏆 " : ""}#{index + 1}
-                      </p>
-                      <p className="text-slate-300">
-                        {user.name}
-                        {isMe && (
-                          <span className="ml-2 text-emerald-300 font-bold">
-                            Du
-                          </span>
-                        )}
-                      </p>
+                      #{index + 1} {user.name}
+                      {isMe && (
+                        <span className="ml-2 text-emerald-300">
+                          Du
+                        </span>
+                      )}
                     </div>
-
-                    <div className="text-right">
-                      <p className="text-2xl font-bold">{user.points}</p>
-                      <p className="text-xs text-slate-400">Punkte</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-slate-900 rounded-xl p-2">
-                      Start: {user.startPoints}
-                    </div>
-
-                    <div className="bg-slate-900 rounded-xl p-2">
-                      Schritte: {user.dailyStepPoints}
-                    </div>
-
-                    <div className="bg-slate-900 rounded-xl p-2">
-                      Minuten: {user.weeklyMinutePoints}
-                    </div>
-
-                    <div className="bg-slate-900 rounded-xl p-2">
-                      Sport: {user.weeklyWorkoutPoints}
-                    </div>
+                    <div className="font-bold">{user.points}</div>
                   </div>
                 </div>
               )
             })}
           </div>
         )}
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-white/10 p-3 flex justify-around">
-        <a href="/dashboard" className="text-xs">
-          Dashboard
-        </a>
-
-        <a href="/eintragen" className="text-xs">
-          Eintragen
-        </a>
-
-        <a href="/wochenwertung" className="text-xs">
-          Woche
-        </a>
-
-        <a href="/gesamtwertung" className="text-xs text-emerald-300">
-          Gesamt
-        </a>
       </div>
     </main>
   )
