@@ -95,9 +95,12 @@ export default function Wochenwertung() {
   const [weeks, setWeeks] = useState<string[]>([])
   const [selectedWeek, setSelectedWeek] = useState("")
   const [ranking, setRanking] = useState<UserWeek[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
+      setLoading(true)
+
       const { data: profilesData } = await supabase
         .from("profiles")
         .select("*")
@@ -123,6 +126,8 @@ export default function Wochenwertung() {
       if (uniqueWeeks.length > 0) {
         setSelectedWeek(uniqueWeeks[0])
       }
+
+      setLoading(false)
     }
 
     load()
@@ -174,8 +179,6 @@ export default function Wochenwertung() {
       map[entry.user_id].workouts += entry.workout_sessions
     })
 
-    // Schritte: tägliche Auswertung
-    // Pro Tag bekommt jede Person mit den meisten Schritten 1 Punkt.
     const days = [...new Set(weekEntries.map((entry) => entry.date))]
 
     days.forEach((day) => {
@@ -194,7 +197,6 @@ export default function Wochenwertung() {
 
     const users = Object.values(map)
 
-    // Bewegungsminuten: Wochenranking
     applyRankingPoints(
       users,
       (user) => user.minutes,
@@ -205,7 +207,6 @@ export default function Wochenwertung() {
       }
     )
 
-    // Sporteinheiten: Wochenranking
     applyRankingPoints(
       users,
       (user) => user.workouts,
@@ -239,37 +240,42 @@ export default function Wochenwertung() {
     setRanking(finalRanking)
   }, [selectedWeek, entries, profiles])
 
+  const leader = ranking[0]
+
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6">
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-8">
-          <p className="text-emerald-300 text-sm uppercase tracking-widest">
+    <main className="min-h-screen bg-slate-950 text-white pb-24">
+      <div className="max-w-5xl mx-auto p-4">
+        <div className="mb-6">
+          <p className="text-emerald-300 text-xs uppercase tracking-widest">
             Wochenranking
           </p>
-          <h1 className="text-4xl font-bold">Wochenwertung</h1>
-          <p className="text-slate-400 mt-2">
-            Schritte werden täglich bewertet. Bewegungsminuten und
-            Sporteinheiten werden pro Woche gerankt.
+          <h1 className="text-3xl font-bold">Wochenwertung</h1>
+          <p className="text-slate-400 mt-2 text-sm">
+            Schritte zählen täglich. Minuten und Sporteinheiten zählen pro Woche.
           </p>
         </div>
 
-        {weeks.length === 0 ? (
-          <div className="bg-white/10 border border-white/10 rounded-3xl p-6">
+        {loading ? (
+          <div className="bg-white/10 border border-white/10 rounded-2xl p-4">
+            <p className="text-slate-300">Lade Wochenwertung...</p>
+          </div>
+        ) : weeks.length === 0 ? (
+          <div className="bg-white/10 border border-white/10 rounded-2xl p-4">
             <p className="text-slate-400">
               Noch keine Wochen-Daten vorhanden.
             </p>
           </div>
         ) : (
           <>
-            <div className="bg-white/10 border border-white/10 rounded-3xl p-5 mb-6">
-              <label className="block text-slate-300 mb-2">
+            <div className="bg-white/10 border border-white/10 rounded-2xl p-4 mb-5">
+              <label className="block text-slate-300 mb-2 text-sm">
                 Woche auswählen
               </label>
 
               <select
                 value={selectedWeek}
                 onChange={(event) => setSelectedWeek(event.target.value)}
-                className="w-full bg-slate-900 border border-white/10 rounded-2xl p-3 text-white"
+                className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
               >
                 {weeks.map((week) => (
                   <option key={week} value={week}>
@@ -279,97 +285,106 @@ export default function Wochenwertung() {
               </select>
             </div>
 
-            <div className="grid md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-white/10 border border-white/10 rounded-3xl p-5">
-                <p className="text-slate-400">Teilnehmer</p>
-                <p className="text-3xl font-bold">{ranking.length}</p>
+            {leader && (
+              <div className="bg-emerald-400/20 border border-emerald-300/30 rounded-2xl p-4 mb-5">
+                <p className="text-emerald-200 text-xs uppercase">
+                  Diese Woche vorne
+                </p>
+                <p className="text-xl font-bold">
+                  🏆 {leader.name} mit {leader.totalWeekPoints} Punkten
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="bg-white/10 rounded-2xl p-4">
+                <p className="text-xs text-slate-400">Teilnehmer</p>
+                <p className="text-2xl font-bold">{ranking.length}</p>
               </div>
 
-              <div className="bg-white/10 border border-white/10 rounded-3xl p-5">
-                <p className="text-slate-400">Meiste Tagessiege Schritte</p>
-                <p className="text-3xl font-bold">
+              <div className="bg-white/10 rounded-2xl p-4">
+                <p className="text-xs text-slate-400">Max Punkte</p>
+                <p className="text-2xl font-bold">
+                  {leader ? leader.totalWeekPoints : 0}
+                </p>
+              </div>
+
+              <div className="bg-white/10 rounded-2xl p-4">
+                <p className="text-xs text-slate-400">Meiste Tagessiege</p>
+                <p className="text-2xl font-bold">
                   {ranking.length > 0
                     ? Math.max(...ranking.map((user) => user.stepPoints))
                     : 0}
                 </p>
               </div>
 
-              <div className="bg-white/10 border border-white/10 rounded-3xl p-5">
-                <p className="text-slate-400">Meiste Minuten</p>
-                <p className="text-3xl font-bold">
+              <div className="bg-white/10 rounded-2xl p-4">
+                <p className="text-xs text-slate-400">Meiste Minuten</p>
+                <p className="text-2xl font-bold">
                   {ranking.length > 0
                     ? Math.max(...ranking.map((user) => user.minutes))
                     : 0}
                 </p>
               </div>
-
-              <div className="bg-white/10 border border-white/10 rounded-3xl p-5">
-                <p className="text-slate-400">Meiste Einheiten</p>
-                <p className="text-3xl font-bold">
-                  {ranking.length > 0
-                    ? Math.max(...ranking.map((user) => user.workouts))
-                    : 0}
-                </p>
-              </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {ranking.map((user, index) => (
                 <div
                   key={user.user_id}
-                  className={`border rounded-3xl p-5 ${
+                  className={`rounded-2xl p-4 border ${
                     index === 0
-                      ? "bg-emerald-400/20 border-emerald-300/40"
+                      ? "bg-emerald-400/20 border-emerald-300/30"
                       : "bg-white/10 border-white/10"
                   }`}
                 >
-                  <div className="flex justify-between items-center gap-4">
+                  <div className="flex justify-between gap-3 mb-4">
                     <div>
-                      <p className="text-slate-400">Platz {index + 1}</p>
-                      <p className="text-2xl font-bold">{user.name}</p>
+                      <p className="font-bold">
+                        {index === 0 ? "🏆 " : ""}#{index + 1}
+                      </p>
+                      <p className="text-slate-300">{user.name}</p>
                     </div>
 
                     <div className="text-right">
-                      <p className="text-3xl font-bold">
+                      <p className="text-2xl font-bold">
                         {user.totalWeekPoints}
                       </p>
-                      <p className="text-slate-400">Wochenpunkte</p>
+                      <p className="text-xs text-slate-400">Wochenpunkte</p>
                     </div>
                   </div>
 
-                  <div className="grid md:grid-cols-4 gap-3 mt-5">
-                    <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4">
-                      <p className="text-slate-400">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-900/80 rounded-xl p-3">
+                      <p className="text-xs text-slate-400">
                         Tagessiege Schritte
                       </p>
-                      <p className="text-xl font-bold">
-                        {user.stepPoints} Pkt.
-                      </p>
-                      <p className="text-slate-500 text-sm">
-                        {user.steps} Schritte gesamt
+                      <p className="font-bold">{user.stepPoints} Pkt.</p>
+                      <p className="text-xs text-slate-500">
+                        {user.steps} Schritte
                       </p>
                     </div>
 
-                    <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4">
-                      <p className="text-slate-400">Minuten</p>
-                      <p className="text-xl font-bold">{user.minutes}</p>
-                    </div>
-
-                    <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4">
-                      <p className="text-slate-400">Minuten-Punkte</p>
-                      <p className="text-xl font-bold">
+                    <div className="bg-slate-900/80 rounded-xl p-3">
+                      <p className="text-xs text-slate-400">Minuten</p>
+                      <p className="font-bold">{user.minutes}</p>
+                      <p className="text-xs text-slate-500">
                         {user.minutePoints} Pkt.
                       </p>
                     </div>
 
-                    <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4">
-                      <p className="text-slate-400">Sport-Punkte</p>
-                      <p className="text-xl font-bold">
+                    <div className="bg-slate-900/80 rounded-xl p-3">
+                      <p className="text-xs text-slate-400">Sporteinheiten</p>
+                      <p className="font-bold">{user.workouts}</p>
+                      <p className="text-xs text-slate-500">
                         {user.workoutPoints} Pkt.
                       </p>
-                      <p className="text-slate-500 text-sm">
-                        {user.workouts} Einheiten
-                      </p>
+                    </div>
+
+                    <div className="bg-slate-900/80 rounded-xl p-3">
+                      <p className="text-xs text-slate-400">Punkte gesamt</p>
+                      <p className="font-bold">{user.totalWeekPoints}</p>
+                      <p className="text-xs text-slate-500">diese Woche</p>
                     </div>
                   </div>
                 </div>
@@ -377,15 +392,24 @@ export default function Wochenwertung() {
             </div>
           </>
         )}
+      </div>
 
-        <div className="mt-8">
-          <a
-            href="/dashboard"
-            className="inline-block bg-emerald-400 text-slate-950 font-bold px-5 py-3 rounded-2xl hover:bg-emerald-300 transition"
-          >
-            Zurück zum Dashboard
-          </a>
-        </div>
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-white/10 p-3 flex justify-around">
+        <a href="/dashboard" className="text-xs">
+          Dashboard
+        </a>
+
+        <a href="/eintragen" className="text-xs">
+          Eintragen
+        </a>
+
+        <a href="/wochenwertung" className="text-xs text-emerald-300">
+          Woche
+        </a>
+
+        <a href="/gesamtwertung" className="text-xs">
+          Gesamt
+        </a>
       </div>
     </main>
   )
