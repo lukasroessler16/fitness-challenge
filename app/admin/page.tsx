@@ -16,117 +16,211 @@ type StartScore = {
   start_points: number
 }
 
-type AdminRow = {
+type Entry = {
+  id: string
   user_id: string
-  name: string
+  date: string
+  steps: number
+  movement_minutes: number
+  workout_sessions: number
+  profiles: {
+    name: string
+  } | null
+}
+
+type ProfileRow = Profile & {
   start_score_id: string | null
   start_points: number
 }
 
 export default function AdminPage() {
-  const [user, setUser] = useState<any>(null)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [rows, setRows] = useState<AdminRow[]>([])
+  const [checked, setChecked] = useState(false)
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [profiles, setProfiles] = useState<ProfileRow[]>([])
   const [message, setMessage] = useState("")
   const router = useRouter()
 
   useEffect(() => {
-    async function load() {
-      const { data: userData } = await supabase.auth.getUser()
+    load()
+  }, [])
 
-      if (!userData.user) {
-        router.push("/login")
-        return
-      }
+  async function load() {
+    const { data: userData } = await supabase.auth.getUser()
 
-      setUser(userData.user)
-
-      const { data: myProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userData.user.id)
-        .single()
-
-      if (!myProfile?.is_admin) {
-        setIsAdmin(false)
-        return
-      }
-
-      setIsAdmin(true)
-
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("name", { ascending: true })
-
-      const { data: startScoresData } = await supabase
-        .from("start_scores")
-        .select("*")
-
-      const profiles = (profilesData ?? []) as Profile[]
-      const startScores = (startScoresData ?? []) as StartScore[]
-
-      const mappedRows = profiles.map((profile) => {
-        const score = startScores.find((s) => s.user_id === profile.id)
-
-        return {
-          user_id: profile.id,
-          name: profile.name,
-          start_score_id: score?.id ?? null,
-          start_points: score?.start_points ?? 0,
-        }
-      })
-
-      setRows(mappedRows)
+    if (!userData.user) {
+      router.push("/login")
+      return
     }
 
-    load()
-  }, [router])
+    const { data: myProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userData.user.id)
+      .single()
 
-  function updateLocalPoints(userId: string, value: number) {
-    setRows((current) =>
-      current.map((row) =>
-        row.user_id === userId
-          ? { ...row, start_points: value }
-          : row
+    if (!myProfile?.is_admin) {
+      setChecked(true)
+      setIsAdmin(false)
+      return
+    }
+
+    setIsAdmin(true)
+    setChecked(true)
+
+    const { data: profilesData } = await supabase
+      .from("profiles")
+      .select("*")
+      .order("name", { ascending: true })
+
+    const { data: startScoresData } = await supabase
+      .from("start_scores")
+      .select("*")
+
+    const { data: entriesData } = await supabase
+      .from("daily_entries")
+      .select(`
+        *,
+        profiles (
+          name
+        )
+      `)
+      .order("date", { ascending: false })
+
+    const loadedProfiles = (profilesData ?? []) as Profile[]
+    const loadedStartScores = (startScoresData ?? []) as StartScore[]
+
+    const mappedProfiles = loadedProfiles.map((profile) => {
+      const startScore = loadedStartScores.find(
+        (score) => score.user_id === profile.id
+      )
+
+      return {
+        ...profile,
+        start_score_id: startScore?.id ?? null,
+        start_points: startScore?.start_points ?? 0,
+      }
+    })
+
+    setProfiles(mappedProfiles)
+    setEntries((entriesData as Entry[]) ?? [])
+  }
+
+  function updateEntryLocal(id: string, field: keyof Entry, value: number | string) {
+    setEntries((current) =>
+      current.map((entry) =>
+        entry.id === id ? { ...entry, [field]: value } : entry
       )
     )
   }
 
-  async function saveStartScore(row: AdminRow) {
+  function updateProfileLocal(
+    id: string,
+    field: keyof ProfileRow,
+    value: string | number | boolean
+  ) {
+    setProfiles((current) =>
+      current.map((profile) =>
+        profile.id === id ? { ...profile, [field]: value } : profile
+      )
+    )
+  }
+
+  async function saveEntry(entry: Entry) {
     setMessage("")
 
-    if (row.start_score_id) {
-      const { error } = await supabase
+    const { error } = await supabase
+      .from("daily_entries")
+      .update({
+        date: entry.date,
+        steps: entry.steps,
+        movement_minutes: entry.movement_minutes,
+        workout_sessions: entry.workout_sessions,
+      })
+      .eq("id", entry.id)
+
+    if (error) {
+      console.log(error)
+      setMessage("Fehler beim Speichern des Eintrags.")
+      return
+    }
+
+    setMessage("Eintrag gespeichert.")
+    await load()
+  }
+
+  async function deleteEntry(entryId: string) {
+    const confirmed = confirm("Diesen Eintrag wirklich löschen?")
+
+    if (!confirmed) return
+
+    setMessage("")
+
+    const { error } = await supabase
+      .from("daily_entries")
+      .delete()
+      .eq("id", entryId)
+
+    if (error) {
+      console.log(error)
+      setMessage("Fehler beim Löschen.")
+      return
+    }
+
+    setEntries((current) => current.filter((entry) => entry.id !== entryId))
+    setMessage("Eintrag gelöscht.")
+  }
+
+  async function saveProfile(profile: ProfileRow) {
+    setMessage("")
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        name: profile.name,
+        is_admin: profile.is_admin,
+      })
+      .eq("id", profile.id)
+
+    if (profileError) {
+      console.log(profileError)
+      setMessage("Fehler beim Speichern des Profils.")
+      return
+    }
+
+    if (profile.start_score_id) {
+      const { error: scoreError } = await supabase
         .from("start_scores")
         .update({
-          start_points: row.start_points,
+          start_points: profile.start_points,
         })
-        .eq("id", row.start_score_id)
+        .eq("id", profile.start_score_id)
 
-      if (error) {
-        console.log(error)
-        setMessage("Fehler beim Aktualisieren.")
+      if (scoreError) {
+        console.log(scoreError)
+        setMessage("Profil gespeichert, aber Startpunkte nicht.")
         return
       }
     } else {
-      const { error } = await supabase.from("start_scores").insert({
-        user_id: row.user_id,
-        start_points: row.start_points,
-      })
+      const { error: scoreError } = await supabase
+        .from("start_scores")
+        .insert({
+          user_id: profile.id,
+          start_points: profile.start_points,
+        })
 
-      if (error) {
-        console.log(error)
-        setMessage("Fehler beim Speichern.")
+      if (scoreError) {
+        console.log(scoreError)
+        setMessage("Profil gespeichert, aber Startpunkte nicht.")
         return
       }
     }
 
-    setMessage("Startpunkte gespeichert.")
-    router.refresh()
+    setMessage("Benutzer gespeichert.")
+    await load()
   }
 
-  if (!user) {
+  if (!checked) {
     return (
       <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
         <p>Lade...</p>
@@ -155,14 +249,14 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white pb-24">
-      <div className="max-w-5xl mx-auto p-4">
+      <div className="max-w-6xl mx-auto p-4">
         <div className="mb-6">
           <p className="text-emerald-300 text-xs uppercase tracking-widest">
             Admin
           </p>
-          <h1 className="text-3xl font-bold">Startpunkte verwalten</h1>
+          <h1 className="text-3xl font-bold">Kontrollzentrum</h1>
           <p className="text-slate-400 mt-2 text-sm">
-            Hier kannst du den bisherigen Zwischenstand als Startwert setzen.
+            Benutzer, Startpunkte und Tageswerte verwalten.
           </p>
         </div>
 
@@ -172,34 +266,183 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div className="space-y-3">
-          {rows.map((row) => (
-            <div
-              key={row.user_id}
-              className="bg-white/10 border border-white/10 rounded-2xl p-4"
-            >
-              <p className="font-bold mb-3">{row.name}</p>
+        <section className="mb-8">
+          <h2 className="text-xl font-bold mb-3">Benutzer verwalten</h2>
 
-              <div className="flex gap-3">
-                <input
-                  type="number"
-                  className="flex-1 bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
-                  value={row.start_points}
-                  onChange={(e) =>
-                    updateLocalPoints(row.user_id, Number(e.target.value))
-                  }
-                />
+          <div className="space-y-3">
+            {profiles.map((profile) => (
+              <div
+                key={profile.id}
+                className="bg-white/10 border border-white/10 rounded-2xl p-4"
+              >
+                <div className="grid md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={profile.name}
+                      onChange={(e) =>
+                        updateProfileLocal(profile.id, "name", e.target.value)
+                      }
+                      className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                    />
+                  </div>
 
-                <button
-                  onClick={() => saveStartScore(row)}
-                  className="bg-emerald-400 text-slate-950 font-bold px-4 rounded-xl"
-                >
-                  Speichern
-                </button>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Startpunkte
+                    </label>
+                    <input
+                      type="number"
+                      value={profile.start_points}
+                      onChange={(e) =>
+                        updateProfileLocal(
+                          profile.id,
+                          "start_points",
+                          Number(e.target.value)
+                        )
+                      }
+                      className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-5">
+                    <input
+                      type="checkbox"
+                      checked={profile.is_admin}
+                      onChange={(e) =>
+                        updateProfileLocal(
+                          profile.id,
+                          "is_admin",
+                          e.target.checked
+                        )
+                      }
+                    />
+                    <span className="text-sm">Admin</span>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => saveProfile(profile)}
+                      className="w-full bg-emerald-400 text-slate-950 font-bold px-4 py-3 rounded-xl"
+                    >
+                      Speichern
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-bold mb-3">Einträge bearbeiten</h2>
+
+          <div className="space-y-3">
+            {entries.length === 0 ? (
+              <p className="text-slate-400">Noch keine Einträge vorhanden.</p>
+            ) : (
+              entries.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="bg-white/10 border border-white/10 rounded-2xl p-4"
+                >
+                  <p className="font-bold mb-3">
+                    {entry.profiles?.name ?? "Unbekannt"}
+                  </p>
+
+                  <div className="grid md:grid-cols-5 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        Datum
+                      </label>
+                      <input
+                        type="date"
+                        value={entry.date}
+                        onChange={(e) =>
+                          updateEntryLocal(entry.id, "date", e.target.value)
+                        }
+                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        Schritte
+                      </label>
+                      <input
+                        type="number"
+                        value={entry.steps}
+                        onChange={(e) =>
+                          updateEntryLocal(
+                            entry.id,
+                            "steps",
+                            Number(e.target.value)
+                          )
+                        }
+                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        Minuten
+                      </label>
+                      <input
+                        type="number"
+                        value={entry.movement_minutes}
+                        onChange={(e) =>
+                          updateEntryLocal(
+                            entry.id,
+                            "movement_minutes",
+                            Number(e.target.value)
+                          )
+                        }
+                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        Sporteinheiten
+                      </label>
+                      <input
+                        type="number"
+                        value={entry.workout_sessions}
+                        onChange={(e) =>
+                          updateEntryLocal(
+                            entry.id,
+                            "workout_sessions",
+                            Number(e.target.value)
+                          )
+                        }
+                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+                      />
+                    </div>
+
+                    <div className="flex gap-2 items-end">
+                      <button
+                        onClick={() => saveEntry(entry)}
+                        className="flex-1 bg-emerald-400 text-slate-950 font-bold px-4 py-3 rounded-xl"
+                      >
+                        Speichern
+                      </button>
+
+                      <button
+                        onClick={() => deleteEntry(entry.id)}
+                        className="flex-1 bg-red-500/20 border border-red-400/30 text-red-200 px-4 py-3 rounded-xl"
+                      >
+                        Löschen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-white/10 p-3 flex justify-around">
