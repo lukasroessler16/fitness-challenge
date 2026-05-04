@@ -28,6 +28,8 @@ export default function Eintragen() {
   const [workouts, setWorkouts] = useState(0)
   const [existingEntry, setExistingEntry] = useState<Entry | null>(null)
   const [message, setMessage] = useState("")
+  const [messageType, setMessageType] = useState<"success" | "error" | "info">("info")
+  const [saving, setSaving] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -45,6 +47,7 @@ export default function Eintragen() {
       if (!user || !date) return
 
       setMessage("")
+      setExistingEntry(null)
 
       const { data, error } = await supabase
         .from("daily_entries")
@@ -55,6 +58,7 @@ export default function Eintragen() {
 
       if (error) {
         console.log(error)
+        setMessageType("error")
         setMessage("Fehler beim Laden des Eintrags.")
         return
       }
@@ -65,8 +69,9 @@ export default function Eintragen() {
         setSteps(entry.steps)
         setMinutes(entry.movement_minutes)
         setWorkouts(entry.workout_sessions)
+        setMessageType("info")
+        setMessage("Für dieses Datum gibt es bereits einen Eintrag. Du kannst ihn bearbeiten.")
       } else {
-        setExistingEntry(null)
         setSteps(0)
         setMinutes(0)
         setWorkouts(0)
@@ -79,6 +84,9 @@ export default function Eintragen() {
   async function speichern() {
     if (!user) return
 
+    setSaving(true)
+    setMessage("")
+
     if (existingEntry) {
       const { error } = await supabase
         .from("daily_entries")
@@ -90,10 +98,14 @@ export default function Eintragen() {
         .eq("id", existingEntry.id)
         .eq("user_id", user.id)
 
+      setSaving(false)
+
       if (error) {
         console.log(error)
+        setMessageType("error")
         setMessage("Fehler beim Aktualisieren.")
       } else {
+        setMessageType("success")
         setMessage("Eintrag aktualisiert!")
         router.push("/dashboard")
       }
@@ -109,10 +121,14 @@ export default function Eintragen() {
       workout_sessions: workouts,
     })
 
+    setSaving(false)
+
     if (error) {
       console.log(error)
+      setMessageType("error")
       setMessage("Fehler beim Speichern.")
     } else {
+      setMessageType("success")
       setMessage("Gespeichert!")
       router.push("/dashboard")
     }
@@ -126,70 +142,115 @@ export default function Eintragen() {
     )
   }
 
+  const messageStyle =
+    messageType === "success"
+      ? "bg-emerald-400/20 border-emerald-300/30 text-emerald-100"
+      : messageType === "error"
+      ? "bg-red-500/20 border-red-400/30 text-red-100"
+      : "bg-white/10 border-white/10 text-slate-200"
+
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6 flex items-center justify-center">
-      <div className="max-w-md w-full bg-white/10 border border-white/10 rounded-3xl p-6">
-        <p className="text-emerald-300 text-sm uppercase tracking-widest mb-2">
-          Tageswerte
-        </p>
+    <main className="min-h-screen bg-slate-950 text-white p-6">
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-8">
+          <p className="text-emerald-300 text-sm uppercase tracking-widest">
+            Tageswerte
+          </p>
+          <h1 className="text-4xl font-bold">Eintrag erfassen</h1>
+          <p className="text-slate-400 mt-2">
+            Trage deine Werte ein oder korrigiere ältere Einträge.
+          </p>
+        </div>
 
-        <h1 className="text-3xl font-bold mb-2">Eintrag erfassen</h1>
+        <div className="grid lg:grid-cols-3 gap-6">
+          <section className="lg:col-span-2 bg-white/10 border border-white/10 rounded-3xl p-6 shadow-2xl">
+            <label className="block mb-2 text-slate-300">Datum</label>
+            <input
+              type="date"
+              className="border border-white/10 bg-slate-900 rounded-2xl p-3 mb-5 w-full text-white outline-none focus:border-emerald-300"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
 
-        <p className="text-slate-400 mb-6">
-          {existingEntry
-            ? "Für dieses Datum gibt es bereits einen Eintrag. Du kannst ihn hier bearbeiten."
-            : "Für dieses Datum gibt es noch keinen Eintrag."}
-        </p>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block mb-2 text-slate-300">Schritte</label>
+                <input
+                  type="number"
+                  className="border border-white/10 bg-slate-900 rounded-2xl p-3 w-full text-white outline-none focus:border-emerald-300"
+                  value={steps}
+                  onChange={(e) => setSteps(Number(e.target.value))}
+                />
+              </div>
 
-        <label className="block mb-2 text-slate-300">Datum</label>
-        <input
-          type="date"
-          className="border border-white/10 bg-slate-900 rounded-2xl p-3 mb-4 w-full text-white"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+              <div>
+                <label className="block mb-2 text-slate-300">Bewegungsminuten</label>
+                <input
+                  type="number"
+                  className="border border-white/10 bg-slate-900 rounded-2xl p-3 w-full text-white outline-none focus:border-emerald-300"
+                  value={minutes}
+                  onChange={(e) => setMinutes(Number(e.target.value))}
+                />
+              </div>
 
-        <label className="block mb-2 text-slate-300">Schritte</label>
-        <input
-          type="number"
-          className="border border-white/10 bg-slate-900 rounded-2xl p-3 mb-4 w-full text-white"
-          value={steps}
-          onChange={(e) => setSteps(Number(e.target.value))}
-        />
+              <div>
+                <label className="block mb-2 text-slate-300">Sporteinheiten</label>
+                <input
+                  type="number"
+                  className="border border-white/10 bg-slate-900 rounded-2xl p-3 w-full text-white outline-none focus:border-emerald-300"
+                  value={workouts}
+                  onChange={(e) => setWorkouts(Number(e.target.value))}
+                />
+              </div>
+            </div>
 
-        <label className="block mb-2 text-slate-300">Bewegungsminuten</label>
-        <input
-          type="number"
-          className="border border-white/10 bg-slate-900 rounded-2xl p-3 mb-4 w-full text-white"
-          value={minutes}
-          onChange={(e) => setMinutes(Number(e.target.value))}
-        />
+            <button
+              onClick={speichern}
+              disabled={saving}
+              className="mt-6 bg-emerald-400 text-slate-950 font-bold px-4 py-3 w-full rounded-2xl hover:bg-emerald-300 transition disabled:opacity-60"
+            >
+              {saving
+                ? "Speichert..."
+                : existingEntry
+                ? "Eintrag aktualisieren"
+                : "Eintrag speichern"}
+            </button>
 
-        <label className="block mb-2 text-slate-300">Sporteinheiten</label>
-        <input
-          type="number"
-          className="border border-white/10 bg-slate-900 rounded-2xl p-3 mb-6 w-full text-white"
-          value={workouts}
-          onChange={(e) => setWorkouts(Number(e.target.value))}
-        />
+            <a
+              href="/dashboard"
+              className="block text-center mt-4 text-slate-400 hover:text-white"
+            >
+              Zurück zum Dashboard
+            </a>
 
-        <button
-          onClick={speichern}
-          className="bg-emerald-400 text-slate-950 font-bold px-4 py-3 w-full rounded-2xl hover:bg-emerald-300 transition"
-        >
-          {existingEntry ? "Eintrag aktualisieren" : "Speichern"}
-        </button>
+            {message && (
+              <div className={`mt-5 border rounded-2xl p-4 ${messageStyle}`}>
+                {message}
+              </div>
+            )}
+          </section>
 
-        <a
-          href="/dashboard"
-          className="block text-center mt-4 text-slate-400 hover:text-white"
-        >
-          Zurück zum Dashboard
-        </a>
+          <aside className="bg-white/10 border border-white/10 rounded-3xl p-6">
+            <p className="text-slate-400 mb-2">Vorschau</p>
 
-        {message && (
-          <p className="text-slate-300 mt-4 text-center">{message}</p>
-        )}
+            <div className="space-y-3">
+              <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4">
+                <p className="text-slate-400">Schritte</p>
+                <p className="text-2xl font-bold">{steps}</p>
+              </div>
+
+              <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4">
+                <p className="text-slate-400">Minuten</p>
+                <p className="text-2xl font-bold">{minutes}</p>
+              </div>
+
+              <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4">
+                <p className="text-slate-400">Sporteinheiten</p>
+                <p className="text-2xl font-bold">{workouts}</p>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </main>
   )

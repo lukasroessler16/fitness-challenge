@@ -7,48 +7,74 @@ import { supabase } from "@/lib/supabase"
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [message, setMessage] = useState("")
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
 
   async function login() {
+    setLoading(true)
+    setMessage("")
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
+    setLoading(false)
+
     if (error) {
-      alert("Login fehlgeschlagen")
+      setMessage("Login fehlgeschlagen. Bitte prüfe E-Mail und Passwort.")
     } else {
       router.push("/dashboard")
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="p-6 bg-white shadow rounded-xl">
-        <h1 className="text-xl mb-4">Login</h1>
+    <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
+      <div className="max-w-md w-full bg-white/10 border border-white/10 rounded-3xl p-8 shadow-2xl">
+        <p className="text-emerald-300 text-sm uppercase tracking-widest mb-2">
+          Fitness Challenge
+        </p>
 
+        <h1 className="text-4xl font-bold mb-3">Login</h1>
+
+        <p className="text-slate-400 mb-8">
+          Melde dich an, um deine Werte einzutragen und das Ranking zu sehen.
+        </p>
+
+        <label className="block mb-2 text-slate-300">E-Mail</label>
         <input
-          placeholder="Email"
-          className="border p-2 mb-2 w-full"
+          type="email"
+          className="border border-white/10 bg-slate-900 rounded-2xl p-3 mb-4 w-full text-white outline-none focus:border-emerald-300"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
 
+        <label className="block mb-2 text-slate-300">Passwort</label>
         <input
           type="password"
-          placeholder="Passwort"
-          className="border p-2 mb-4 w-full"
+          className="border border-white/10 bg-slate-900 rounded-2xl p-3 mb-6 w-full text-white outline-none focus:border-emerald-300"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") login()
+          }}
         />
 
         <button
           onClick={login}
-          className="bg-black text-white px-4 py-2 w-full"
+          disabled={loading}
+          className="bg-emerald-400 text-slate-950 font-bold px-4 py-3 w-full rounded-2xl hover:bg-emerald-300 transition disabled:opacity-60"
         >
-          Login
+          {loading ? "Wird angemeldet..." : "Einloggen"}
         </button>
+
+        {message && (
+          <div className="mt-5 bg-red-500/20 border border-red-400/30 text-red-100 rounded-2xl p-4">
+            {message}
+          </div>
+        )}
       </div>
-    </div>
+    </main>
   )
 }
